@@ -10,6 +10,7 @@ suppressPackageStartupMessages({
   library(ape)
   library(geiger)
   library(INLA)
+  library(dplyr)
   source('varcov_spatial.R')
 })
 
@@ -24,6 +25,7 @@ cov2precision = function(cov_mat){
 
 args = commandArgs(trailingOnly = TRUE)
 filename = args[1]
+filename = "output/simulated_data/Prop0.4_Lambda0.4Iter17.csv"
 
 ### Data ####
 data = read.csv(filename)
@@ -42,10 +44,13 @@ kappa = 2 # smoothness parameter as recommended by Dinnage et al. (2020)
 sigma = c(1, 1.15) # Sigma parameter. First value is not used. 
 
 # Phylogenetic Precision matrix
-phylo_covar_mat <- ape::vcv(tree)
-phylo_covar_mat <- phylo_covar_mat / max(phylo_covar_mat)
-# The diagonal of phylo_covar_mat should inform our prior
-phylo_prec_mat = cov2precision(phylo_covar_mat)
+# phylo_covar_mat <- ape::vcv(tree)
+# phylo_covar_mat <- phylo_covar_mat / max(phylo_covar_mat)
+# # The diagonal of phylo_covar_mat should inform our prior
+# phylo_prec_mat = cov2precision(phylo_covar_mat)
+phy_inv_nodes = MCMCglmm::inverseA(tree, nodes = "ALL", scale = FALSE)$Ainv %>%
+  as.matrix()
+
 
 # Spatial Precision matrix
 spatial_covar_mat = varcov.spatial(data[,c("Longitude", "Latitude")], 
@@ -69,15 +74,11 @@ rownames(data) = data$Language_ID
 #### Phylo Only model ####
 lambdaonly_model = inla(formula = y ~
                       f(Language_ID,
-                        model = "generic0",
-                        Cmatrix = phylo_prec_mat,
+                        model = "generic2",
+                        Cmatrix = phy_inv_nodes,
                         constr = TRUE,
                         hyper = pcprior,
-                        values = rownames(phylo_prec_mat)) +
-                      f(Language_ID2,
-                        model = "iid",
-                        hyper = pcprior,
-                        constr = TRUE),
+                        values = rownames(phy_inv_nodes)) ,
                     family = "binomial",
                     data = data)
 
